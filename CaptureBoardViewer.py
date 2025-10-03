@@ -10,12 +10,15 @@ class VideoThread(QThread):
 
     def run(self):
         cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 768)
+        cap.set(cv2.CAP_PROP_FPS, 120)
         while self.playing:
             ret, frame = cap.read()
             if ret:
                 h, w, ch = frame.shape
                 bytesPerLine = ch * w
-                self.change_pixmap_signal.emit(QImage(frame, w, h, bytesPerLine, QImage.Format.Format_BGR888).scaled(QSize(1920, 1080), Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                self.change_pixmap_signal.emit(QImage(frame.data, w, h, bytesPerLine, QImage.Format.Format_BGR888).scaled(QSize(1280, 768), Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation).convertToFormat(QImage.Format.Format_RGBA32FPx4_Premultiplied, Qt.ImageConversionFlag.NoOpaqueDetection))
         cap.release()
 
     def stop(self):
@@ -47,7 +50,7 @@ class Window(QMainWindow):
 
     @Slot(QImage)
     def update_image(self, image):
-        self.img_label1.setPixmap(QPixmap.fromImage(image).scaled(self.video_size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        self.img_label1.setPixmap(QPixmap.fromImage(image, Qt.ImageConversionFlag.NoOpaqueDetection).scaled(self.video_size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation))
 
 if __name__ == "__main__":
     app = QApplication([])
