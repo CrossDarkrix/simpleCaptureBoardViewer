@@ -1,5 +1,6 @@
 import sys
 import cv2
+import time
 from PySide6.QtCore import Qt, Signal, Slot, QThread, QSize
 from PySide6.QtWidgets import QMainWindow, QLabel, QApplication
 from PySide6.QtGui import QImage, QPixmap
@@ -19,6 +20,7 @@ class VideoThread(QThread):
                 h, w, ch = frame.shape
                 bytesPerLine = ch * w
                 self.change_pixmap_signal.emit(QImage(frame.data, w, h, bytesPerLine, QImage.Format.Format_BGR888).scaled(QSize(1280, 768), Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation).convertToFormat(QImage.Format.Format_RGBA32FPx4_Premultiplied, Qt.ImageConversionFlag.NoOpaqueDetection))
+            time.sleep(0.1)
         cap.release()
 
     def stop(self):
