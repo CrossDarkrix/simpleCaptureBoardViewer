@@ -47,6 +47,9 @@ class Window(QMainWindow):
         if e.key() == Qt.Key.Key_Q:
             self.thread.stop()
             sys.exit()
+        if e.key() == Qt.Key.Key_Escape:
+            self.thread.stop()
+            sys.exit()
 
     @Slot(QImage)
     def update_image(self, image):
