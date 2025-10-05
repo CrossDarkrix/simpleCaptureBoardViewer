@@ -1,63 +1,62 @@
 import ast
+import concurrent.futures
+import os
 import sys
-import cv2
 import time
-import threading
+
+import cv2
 import pyaudio
 from PySide6.QtCore import Qt, Signal, Slot, QThread, QSize
-from PySide6.QtWidgets import QMainWindow, QLabel, QApplication
 from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtWidgets import QMainWindow, QLabel, QApplication
+
 
 class VideoThread(QThread):
     change_pixmap_signal = Signal(QImage)
     playing = True
-    audio = pyaudio.PyAudio()
 
-    def __init__(self):
-        super().__init__()
-        self.stream = self.audio.open(format=pyaudio.paFloat32,
-                            rate=96000,
-                            channels=1,
-                            input_device_index=self.check_device(),
-                            input=True,
-                            frames_per_buffer=1024)
-        self.play = self.audio.open(format=pyaudio.paFloat32,
-                          rate=96000, channels=1,
-                          output_device_index=self.audio.get_default_output_device_info()['index'],
-                          output=True,
-                          frames_per_buffer=1024
-                          )
     def run(self):
-        cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 768)
-        cap.set(cv2.CAP_PROP_FPS, 120)
+        def _audio():
+            def check_device():
+                audio = pyaudio.PyAudio()
+                for i in range(audio.get_device_count()):
+                    data = ast.literal_eval(
+                        '{}'.format(audio.get_device_info_by_index(i)).encode("utf-8", errors='ignore').decode("utf-8", errors='ignore'))
+                    if data["hostApi"] == 2 and "USB3.0 Capture" in data["name"]:
+                        return data["index"]
+            stream = pyaudio.PyAudio().open(format=pyaudio.paInt16,
+                                     rate=96000,
+                                     channels=1,
+                                     input_device_index=check_device(),
+                                     input=True)
+            play = pyaudio.PyAudio().open(format=pyaudio.paInt16,
+                                   rate=96000, channels=1,
+                                   output_device_index=pyaudio.PyAudio().get_default_output_device_info()['index'],
+                                   output=True
+                                   )
+            while self.playing:
+                concurrent.futures.ThreadPoolExecutor().submit(play.write, stream.read(7024))
+
+        def _video():
+            cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 768)
+            cap.set(cv2.CAP_PROP_FPS, 120)
+            while self.playing:
+                ret, frame = cap.read()
+                if ret:
+                    h, w, ch = frame.shape
+                    bytesPerLine = ch * w
+                    self.change_pixmap_signal.emit(QImage(frame.data, w, h, bytesPerLine, QImage.Format.Format_BGR888).scaled(QSize(1280, 768), Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation).convertToFormat(QImage.Format.Format_RGBA32FPx4_Premultiplied, Qt.ImageConversionFlag.NoOpaqueDetection))
+            cap.release()
+        concurrent.futures.ThreadPoolExecutor(os.cpu_count() * 999999999).submit(_audio)
+        concurrent.futures.ThreadPoolExecutor(os.cpu_count() * 999999999).submit(_video)
         while self.playing:
-            ret, frame = cap.read()
-            if ret:
-                h, w, ch = frame.shape
-                bytesPerLine = ch * w
-                self.play.write(self.stream.read(3024))
-                self.change_pixmap_signal.emit(QImage(frame.data, w, h, bytesPerLine, QImage.Format.Format_BGR888).scaled(QSize(1280, 768), Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation).convertToFormat(QImage.Format.Format_RGBA32FPx4_Premultiplied, Qt.ImageConversionFlag.NoOpaqueDetection))
-            time.sleep(0.01)
-        cap.release()
+            time.sleep(1)
 
     def stop(self):
-
         self.playing = False
         self.wait()
-
-    def audio_stop(self):
-        self.stream.stop_stream()
-        self.stream.close()
-        self.audio.terminate()
-
-    def check_device(self):
-        audio = pyaudio.PyAudio()
-        for i in range(audio.get_device_count()):
-            data = ast.literal_eval('{}'.format(audio.get_device_info_by_index(i)).encode("utf-8", errors='ignore').decode("utf-8", errors='ignore'))
-            if data["hostApi"] == 2 and "USB3.0 Capture" in data["name"]:
-                return data["index"]
 
 
 class Window(QMainWindow):
@@ -90,8 +89,11 @@ class Window(QMainWindow):
     def update_image(self, image):
         self.img_label1.setPixmap(QPixmap.fromImage(image, Qt.ImageConversionFlag.NoOpaqueDetection).scaled(self.video_size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation))
 
-if __name__ == "__main__":
+def main():
     app = QApplication([])
     ex = Window()
     ex.show()
     sys.exit(app.exec())
+
+if __name__ == "__main__":
+    main()
