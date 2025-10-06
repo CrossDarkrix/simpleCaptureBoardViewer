@@ -1,9 +1,7 @@
 import ast
 import asyncio
-import multiprocessing
 import sys
 import cv2
-import threading
 import pyaudio
 from PySide6.QtCore import Qt, Signal, Slot, QThread, QSize
 from PySide6.QtGui import QImage, QPixmap
@@ -30,10 +28,8 @@ play = pyaudio.PyAudio().open(format=pyaudio.paInt16,
                                    output=True) # output to Speaker
 
 def _audio():
-    async def _output():
-        while _Playing[0]:
-            play.write(stream.read(128))
-    asyncio.run(_output())
+    while _Playing[0]:
+        play.write(stream.read(128))
 
 
 class VideoThread(QThread):
@@ -54,10 +50,11 @@ class VideoThread(QThread):
                     bytesPerLine = ch * w
                     self.change_pixmap_signal.emit(QImage(frame, w, h, bytesPerLine, QImage.Format.Format_BGR888))
             cap.release()
-        multiprocessing.Process(target=_audio, daemon=True, name='Audio Interface Controller Process').start() # run subprocess
-        _t = threading.Thread(target=asyncio.run, args=(_video(), ), daemon=True)
-        _t.start()
-        _t.join()
+
+        async def _run():
+            await asyncio.gather(asyncio.to_thread(_audio), _video())
+
+        asyncio.run(_run())
 
     def stop(self):
         self.playing = False
@@ -102,5 +99,4 @@ def main():
     sys.exit(app.exec())
 
 if __name__ == "__main__":
-    multiprocessing.freeze_support()
     main()
