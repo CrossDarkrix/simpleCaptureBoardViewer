@@ -3,6 +3,7 @@ import asyncio
 import multiprocessing
 import sys
 import cv2
+import threading
 import pyaudio
 from PySide6.QtCore import Qt, Signal, Slot, QThread, QSize
 from PySide6.QtGui import QImage, QPixmap
@@ -17,6 +18,7 @@ def check_device(): # check index from "USB Capture Board"
         if data["hostApi"] == 2 and "USB3.0 Capture" in data["name"]:
             return data["index"]
 
+
 stream = pyaudio.PyAudio().open(format=pyaudio.paInt16,
                                      rate=96000,
                                      channels=1,
@@ -28,8 +30,10 @@ play = pyaudio.PyAudio().open(format=pyaudio.paInt16,
                                    output=True) # output to Speaker
 
 def _audio():
-    while _Playing[0]:
-        play.write(stream.read(1024))
+    async def _output():
+        while _Playing[0]:
+            play.write(stream.read(128))
+    asyncio.run(_output())
 
 
 class VideoThread(QThread):
@@ -48,11 +52,12 @@ class VideoThread(QThread):
                 if ret:
                     h, w, ch = frame.shape
                     bytesPerLine = ch * w
-                    self.change_pixmap_signal.emit(QImage(frame.data, w, h, bytesPerLine, QImage.Format.Format_BGR888))
+                    self.change_pixmap_signal.emit(QImage(frame, w, h, bytesPerLine, QImage.Format.Format_BGR888))
             cap.release()
-            return
-        multiprocessing.Process(target=_audio, daemon=True).start() # run subprocess
-        asyncio.run(_video())
+        multiprocessing.Process(target=_audio, daemon=True, name='Audio Interface Controller Process').start() # run subprocess
+        _t = threading.Thread(target=asyncio.run, args=(_video(), ), daemon=True)
+        _t.start()
+        _t.join()
 
     def stop(self):
         self.playing = False
