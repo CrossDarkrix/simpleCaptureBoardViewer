@@ -1,5 +1,5 @@
 import ast
-import threading
+import multiprocessing
 import sys
 
 import cv2
@@ -31,6 +31,7 @@ def _audio():
     while True:
         play.write(stream.read(128))
 
+
 class _QLabel(QLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -53,7 +54,7 @@ class Window(QMainWindow):
         self.app = app
         self.initUI()
         self.setWindowTitle("Capture Board Viewer")
-        self.threads = threading.Thread(target=_audio, daemon=True)
+        self.threads = multiprocessing.Process(target=_audio, daemon=True)
         self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 700)
