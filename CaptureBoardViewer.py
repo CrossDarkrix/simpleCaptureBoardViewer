@@ -4,8 +4,8 @@ import sys
 import cv2
 import pyaudio
 from PySide6.QtCore import Qt, Signal, Slot, QThread, QSize
-from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import QMainWindow, QLabel, QApplication
+from PySide6.QtGui import QImage, QPixmap, QPainter
+from PySide6.QtWidgets import QMainWindow, QLabel, QApplication, QSizePolicy
 
 _Playing = [True]
 
@@ -31,6 +31,20 @@ def _audio():
     while _Playing[0]:
         play.write(stream.read(128))
 
+class _QLabel(QLabel):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.p = QPixmap()
+
+    def setPixmap(self, p):
+        self.p = p
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        painter.drawPixmap(self.rect(), self.p)
+
 
 class VideoThread(QThread):
     change_pixmap_signal = Signal(QImage)
@@ -40,7 +54,7 @@ class VideoThread(QThread):
     def run(self):
         async def _video():
             cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1200)
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 700)
             cap.set(cv2.CAP_PROP_FPS, 120)
             while self.playing:
@@ -63,7 +77,7 @@ class VideoThread(QThread):
 
 
 class Window(QMainWindow):
-    video_size = QSize(1200, 700)
+    video_size = QSize(1280, 700)
     def __init__(self):
         super().__init__()    
         self.initUI()
@@ -76,9 +90,15 @@ class Window(QMainWindow):
         self.thread.stop()
 
     def initUI(self):
-        self.setFixedSize(self.video_size)
-        self.img_label1 = QLabel()
+        # self.setFixedSize(self.video_size)
+        self.img_label1 = _QLabel()
+        self.img_label1.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setCentralWidget(self.img_label1)
+        self.setMinimumSize(QSize(480, 360))
+        self.resize(self.video_size)
+
+    def resizeEvent(self, event):
+        self.img_label1.resize(event.size())
 
     def keyPressEvent(self, e):
         if e.key() == Qt.Key.Key_Q:
