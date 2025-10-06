@@ -1,13 +1,13 @@
 import ast
-import asyncio
+import threading
 import sys
+
 import cv2
 import pyaudio
-from PySide6.QtCore import Qt, Signal, Slot, QThread, QSize
+from PySide6.QtCore import Qt, QSize, QTimer
 from PySide6.QtGui import QImage, QPixmap, QPainter
 from PySide6.QtWidgets import QMainWindow, QLabel, QApplication, QSizePolicy
 
-_Playing = [True]
 
 def check_device(): # check index from "USB Capture Board"
     audio = pyaudio.PyAudio()
@@ -28,7 +28,7 @@ play = pyaudio.PyAudio().open(format=pyaudio.paInt16,
                                    output=True) # output to Speaker
 
 def _audio():
-    while _Playing[0]:
+    while True:
         play.write(stream.read(128))
 
 class _QLabel(QLabel):
@@ -46,51 +46,36 @@ class _QLabel(QLabel):
         painter.drawPixmap(self.rect(), self.p)
 
 
-class VideoThread(QThread):
-    change_pixmap_signal = Signal(QImage)
-    playing = True
-    _Playing[0] = True
-
-    def run(self):
-        async def _video():
-            cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 700)
-            cap.set(cv2.CAP_PROP_FPS, 120)
-            while self.playing:
-                ret, frame = cap.read()
-                if ret:
-                    h, w, ch = frame.shape
-                    bytesPerLine = ch * w
-                    self.change_pixmap_signal.emit(QImage(frame, w, h, bytesPerLine, QImage.Format.Format_BGR888))
-            cap.release()
-
-        async def _run():
-            await asyncio.gather(asyncio.to_thread(_audio), _video())
-
-        asyncio.run(_run())
-
-    def stop(self):
-        self.playing = False
-        _Playing[0] = False
-        self.wait()
-
-
 class Window(QMainWindow):
     video_size = QSize(1280, 700)
-    def __init__(self):
-        super().__init__()    
+    def __init__(self, app):
+        super().__init__()
+        self.app = app
         self.initUI()
         self.setWindowTitle("Capture Board Viewer")
-        self.thread = VideoThread()
-        self.thread.change_pixmap_signal.connect(self.update_image)
-        self.thread.start()
+        self.threads = threading.Thread(target=_audio, daemon=True)
+        self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 700)
+        self.cap.set(cv2.CAP_PROP_FPS, 120)
+        self._audio_video_timer = QTimer(self)
+        self._audio_video_timer.singleShot(0, self._audio)
+        self._audio_video_timer.timeout.connect(self._video)
+        self._audio_video_timer.start()
+
+    def _video(self):
+        ret, frame = self.cap.read()
+        if ret:
+            h, w, ch = frame.shape
+            bytesPerLine = ch * w
+            self.img_label1.setPixmap(QPixmap.fromImage(QImage(frame, w, h, bytesPerLine, QImage.Format.Format_BGR888), Qt.ImageConversionFlag.NoOpaqueDetection))
 
     def closeEvent(self, _):
-        self.thread.stop()
+        self.threads.join(0)
+        self._audio_video_timer.stop()
+        self.cap.release()
 
     def initUI(self):
-        # self.setFixedSize(self.video_size)
         self.img_label1 = _QLabel()
         self.img_label1.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setCentralWidget(self.img_label1)
@@ -102,21 +87,27 @@ class Window(QMainWindow):
 
     def keyPressEvent(self, e):
         if e.key() == Qt.Key.Key_Q:
-            self.thread.stop()
-            sys.exit()
+            self.threads.join(0)
+            self._audio_video_timer.stop()
+            self.cap.release()
+            sys.exit(0)
         if e.key() == Qt.Key.Key_Escape:
-            self.thread.stop()
-            sys.exit()
+            self.threads.join(0)
+            self._audio_video_timer.stop()
+            self.cap.release()
+            sys.exit(0)
 
-    @Slot(QImage)
-    def update_image(self, image):
-        self.img_label1.setPixmap(QPixmap.fromImage(image, Qt.ImageConversionFlag.NoOpaqueDetection).scaled(self.video_size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation))
+    def _audio(self):
+        self.threads.start()
+
+    def _start(self):
+        return self.app.exec()
 
 def main():
     app = QApplication([])
-    ex = Window()
+    ex = Window(app=app)
     ex.show()
-    sys.exit(app.exec())
+    sys.exit(ex._start())
 
 if __name__ == "__main__":
     main()
