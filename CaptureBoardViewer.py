@@ -1,14 +1,14 @@
 import ast
 import asyncio
-import multiprocessing
 import sys
+import signal
 import threading
-import platform
 import cv2
 import pyaudio
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QImage, QPixmap, QPainter
 from PySide6.QtWidgets import QMainWindow, QLabel, QApplication, QSizePolicy
+
 
 def check_device(): # check index from "USB Capture Board"
     audio = pyaudio.PyAudio()
@@ -29,20 +29,12 @@ play = pyaudio.PyAudio().open(format=pyaudio.paInt16,
                                    output=True) # output to Speaker
 
 
-def _audio_loader():
+def _audio():
     while True:
         try:
-            play.write(stream.read(128))
+            yield stream.read(128)
         except SystemExit:
             break
-
-def _audio():
-    with multiprocessing.Pool(3) as _pool:
-        _pool.apply(_audio_loader)
-
-def _return_data(data):
-    return data
-
 
 def _video():
     cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
@@ -88,7 +80,7 @@ class Window(QMainWindow):
         super().__init__()
         self.initUI()
         self.setWindowTitle("Capture Board Viewer")
-        self.process = threading.Thread(target=_audio, daemon=True)
+        self.process = threading.Thread(target=self._audio, daemon=True)
         self.thread = threading.Thread(target=self._video, daemon=True)
         asyncio.run(self._load())
 
@@ -104,12 +96,18 @@ class Window(QMainWindow):
     def _video(self):
         [self.img_label1.setPixmap(QPixmap.fromImage(image, Qt.ImageConversionFlag.NoOpaqueDetection)) for image in _video()]
 
-    def closeEvent(self, _):
+    def _audio(self):
+        [play.write(microphone) for microphone in _audio()]
+
+    def _kill(self, _):
         try:
             self.process.join(0)
             self.thread.join(0)
         except:
             pass
+
+    def closeEvent(self, _):
+        signal.signal(signal.SIGTERM, self._kill)
         sys.exit(0)
 
     def initUI(self):
@@ -124,18 +122,10 @@ class Window(QMainWindow):
 
     def keyPressEvent(self, e):
         if e.key() == Qt.Key.Key_Q:
-            try:
-                self.process.join(0)
-                self.thread.join(0)
-            except:
-                pass
+            signal.signal(signal.SIGTERM, self._kill)
             sys.exit(0)
         if e.key() == Qt.Key.Key_Escape:
-            try:
-                self.process.join(0)
-                self.thread.join(0)
-            except:
-                pass
+            signal.signal(signal.SIGTERM, self._kill)
             sys.exit(0)
 
 
@@ -146,8 +136,4 @@ def main():
     sys.exit(app.exec())
 
 if __name__ == "__main__":
-    if platform.system() == 'Linux':
-        multiprocessing.set_start_method('fork')
-    else:
-        multiprocessing.set_start_method('spawn')
     main()
