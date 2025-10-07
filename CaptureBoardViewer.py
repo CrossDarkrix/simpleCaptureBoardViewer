@@ -1,13 +1,16 @@
 import ast
+import asyncio
 import multiprocessing
 import sys
-
+import threading
+import platform
 import cv2
 import pyaudio
-from PySide6.QtCore import Qt, QSize, QTimer
+import signal
+from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QImage, QPixmap, QPainter
 from PySide6.QtWidgets import QMainWindow, QLabel, QApplication, QSizePolicy
-
+from multiprocessing import Pool
 
 def check_device(): # check index from "USB Capture Board"
     audio = pyaudio.PyAudio()
@@ -27,9 +30,47 @@ play = pyaudio.PyAudio().open(format=pyaudio.paInt16,
                                    output_device_index=pyaudio.PyAudio().get_default_output_device_info()['index'],
                                    output=True) # output to Speaker
 
-def _audio():
+
+def _audio_loader():
     while True:
-        play.write(stream.read(128))
+        try:
+            play.write(stream.read(128))
+        except SystemExit:
+            break
+
+def _audio():
+    with Pool(2) as _pool:
+        _pool.apply(_audio_loader)
+
+def _return_data(data):
+    return data
+
+
+def _video():
+    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 700)
+    cap.set(cv2.CAP_PROP_FPS, 60)
+
+    def _load(cap):
+        while True:
+            try:
+                ret, frame = cap.read()
+                if ret:
+                    h, w, ch = frame.shape
+                    bytesPerLine = ch * w
+                    data = {"data": frame,
+                            "w": w,
+                            "h": h,
+                            "bytesPerLine": bytesPerLine}
+                    yield data
+            except SystemExit:
+                break
+        cap.release()
+
+    with Pool(10) as pool:
+        for data in pool.imap(_return_data, _load(cap)):
+            yield QImage(data["data"], data["w"], data["h"], data["bytesPerLine"], QImage.Format.Format_BGR888)
 
 
 class _QLabel(QLabel):
@@ -39,7 +80,10 @@ class _QLabel(QLabel):
 
     def setPixmap(self, p):
         self.p = p
-        self.update()
+        try:
+            self.update()
+        except:
+            pass
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -49,32 +93,33 @@ class _QLabel(QLabel):
 
 class Window(QMainWindow):
     video_size = QSize(1280, 700)
-    def __init__(self, app):
+    def __init__(self):
         super().__init__()
-        self.app = app
         self.initUI()
         self.setWindowTitle("Capture Board Viewer")
-        self.threads = multiprocessing.Process(target=_audio, daemon=True)
-        self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 700)
-        self.cap.set(cv2.CAP_PROP_FPS, 120)
-        self._audio_video_timer = QTimer(self)
-        self._audio_video_timer.singleShot(0, self._audio)
-        self._audio_video_timer.timeout.connect(self._video)
-        self._audio_video_timer.start()
+        self.process = threading.Thread(target=_audio, daemon=True)
+        self.thread = threading.Thread(target=self._video, daemon=True)
+        asyncio.run(self._load())
+
+    async def _load(self):
+        await asyncio.gather(asyncio.to_thread(self._load2), self._load1())
+
+    async def _load1(self):
+        self.process.start()
+
+    def _load2(self):
+        self.thread.start()
 
     def _video(self):
-        ret, frame = self.cap.read()
-        if ret:
-            h, w, ch = frame.shape
-            bytesPerLine = ch * w
-            self.img_label1.setPixmap(QPixmap.fromImage(QImage(frame, w, h, bytesPerLine, QImage.Format.Format_BGR888), Qt.ImageConversionFlag.NoOpaqueDetection))
+        [self.img_label1.setPixmap(QPixmap.fromImage(image, Qt.ImageConversionFlag.NoOpaqueDetection)) for image in _video()]
 
     def closeEvent(self, _):
-        self.threads.join(0)
-        self._audio_video_timer.stop()
-        self.cap.release()
+        try:
+            self.process.join(0)
+            self.thread.join(0)
+        except:
+            pass
+        sys.exit(0)
 
     def initUI(self):
         self.img_label1 = _QLabel()
@@ -88,27 +133,30 @@ class Window(QMainWindow):
 
     def keyPressEvent(self, e):
         if e.key() == Qt.Key.Key_Q:
-            self.threads.join(0)
-            self._audio_video_timer.stop()
-            self.cap.release()
+            try:
+                self.process.join(0)
+                self.thread.join(0)
+            except:
+                pass
             sys.exit(0)
         if e.key() == Qt.Key.Key_Escape:
-            self.threads.join(0)
-            self._audio_video_timer.stop()
-            self.cap.release()
+            try:
+                self.process.join(0)
+                self.thread.join(0)
+            except:
+                pass
             sys.exit(0)
 
-    def _audio(self):
-        self.threads.start()
-
-    def _start(self):
-        return self.app.exec()
 
 def main():
     app = QApplication([])
-    ex = Window(app=app)
+    ex = Window()
     ex.show()
-    sys.exit(ex._start())
+    sys.exit(app.exec())
 
 if __name__ == "__main__":
+    if platform.system() == 'Linux':
+        multiprocessing.set_start_method('fork')
+    else:
+        multiprocessing.set_start_method('spawn')
     main()
