@@ -6,11 +6,9 @@ import threading
 import platform
 import cv2
 import pyaudio
-import signal
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QImage, QPixmap, QPainter
 from PySide6.QtWidgets import QMainWindow, QLabel, QApplication, QSizePolicy
-from multiprocessing import Pool
 
 def check_device(): # check index from "USB Capture Board"
     audio = pyaudio.PyAudio()
@@ -39,7 +37,7 @@ def _audio_loader():
             break
 
 def _audio():
-    with Pool(2) as _pool:
+    with multiprocessing.Pool(3) as _pool:
         _pool.apply(_audio_loader)
 
 def _return_data(data):
@@ -51,27 +49,20 @@ def _video():
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 700)
     cap.set(cv2.CAP_PROP_FPS, 60)
-
-    def _load(cap):
-        while True:
-            try:
-                ret, frame = cap.read()
-                if ret:
-                    h, w, ch = frame.shape
-                    bytesPerLine = ch * w
-                    data = {"data": frame,
-                            "w": w,
-                            "h": h,
-                            "bytesPerLine": bytesPerLine}
-                    yield data
-            except SystemExit:
-                break
-        cap.release()
-
-    with Pool(10) as pool:
-        for data in pool.imap(_return_data, _load(cap)):
-            yield QImage(data["data"], data["w"], data["h"], data["bytesPerLine"], QImage.Format.Format_BGR888)
-
+    while True:
+        try:
+            ret, frame = cap.read()
+            if ret:
+                h, w, ch = frame.shape
+                bytesPerLine = ch * w
+                data = {"data": frame,
+                        "w": w,
+                        "h": h,
+                        "bytesPerLine": bytesPerLine}
+                yield QImage(data["data"], data["w"], data["h"], data["bytesPerLine"], QImage.Format.Format_BGR888)
+        except SystemExit:
+            break
+    cap.release()
 
 class _QLabel(QLabel):
     def __init__(self, parent=None):
