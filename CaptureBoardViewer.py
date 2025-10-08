@@ -24,34 +24,26 @@ class _QLabel(QLabel):
         painter.setRenderHint(QPainter.RenderHint.LosslessImageRendering)
         painter.drawPixmap(self.rect(), self.p)
 
-
 class VideoThread(QThread):
     change_pixmap_signal = Signal(QImage)
     playing = True
-    stopping = False
 
     def run(self):
+        cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 700)
+        cap.set(cv2.CAP_PROP_FPS, 120)
         while self.playing:
-            self.stopping = False
-            cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 700)
-            cap.set(cv2.CAP_PROP_FPS, 120)
-            while not self.stopping:
-                ret, frame = cap.read()
-                if ret:
-                    h, w, ch = frame.shape
-                    bytesPerLine = ch * w
-                    self.change_pixmap_signal.emit(QImage(frame, w, h, bytesPerLine, QImage.Format.Format_BGR888).convertToFormat(QImage.Format.Format_RGBA8888, Qt.ImageConversionFlag.NoOpaqueDetection))
-            cap.release()
+            ret, frame = cap.read()
+            if ret:
+                h, w, ch = frame.shape
+                bytesPerLine = ch * w
+                self.change_pixmap_signal.emit(QImage(frame, w, h, bytesPerLine, QImage.Format.Format_BGR888).convertToFormat(QImage.Format.Format_RGBA8888, Qt.ImageConversionFlag.NoOpaqueDetection))
+        cap.release()
 
     def stop(self):
         self.playing = False
-        self.stopping = True
         self.wait()
-
-    def restart(self):
-        self.stopping = True
 
 
 class AudioThread(QThread):
@@ -140,7 +132,6 @@ class Window(QMainWindow):
             menu = QMenu()
             menu.addAction("close Window", self._close_window)
             menu.addAction("set View ON/OFF", self._setVisble_label)
-            menu.addAction("restart view", self._restart_view)
             menu.exec(self.mapToGlobal(event.position().toPoint()))
 
     def _close_window(self):
@@ -153,14 +144,8 @@ class Window(QMainWindow):
         else:
             self.img_label1.setVisible(True)
 
-    def _restart_view(self):
-        self.img_label1.setVisible(False)
-        self.thread1.restart()
-        self.img_label1.setVisible(True)
-
     def _Exec(self):
         return self.app.exec()
-
 
 def main():
     ex = Window(app=QApplication([]))
