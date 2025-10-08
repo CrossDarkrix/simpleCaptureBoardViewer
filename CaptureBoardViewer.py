@@ -1,13 +1,13 @@
 import ast
 import asyncio
-import sys
 import signal
+import sys
 import threading
 import cv2
 import pyaudio
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, QEvent
 from PySide6.QtGui import QImage, QPixmap, QPainter
-from PySide6.QtWidgets import QMainWindow, QLabel, QApplication, QSizePolicy
+from PySide6.QtWidgets import QMainWindow, QLabel, QApplication, QSizePolicy, QMenu
 
 
 def check_device(): # check index from "USB Capture Board"
@@ -38,7 +38,7 @@ def _audio():
 
 def _video():
     cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1200)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 700)
     cap.set(cv2.CAP_PROP_FPS, 60)
     while True:
@@ -47,11 +47,7 @@ def _video():
             if ret:
                 h, w, ch = frame.shape
                 bytesPerLine = ch * w
-                data = {"data": frame,
-                        "w": w,
-                        "h": h,
-                        "bytesPerLine": bytesPerLine}
-                yield QImage(data["data"], data["w"], data["h"], data["bytesPerLine"], QImage.Format.Format_BGR888)
+                yield QImage(frame, w, h, bytesPerLine, QImage.Format.Format_BGR888).convertToFormat(QImage.Format.Format_RGBA8888, Qt.ImageConversionFlag.NoOpaqueDetection)
         except SystemExit:
             break
     cap.release()
@@ -70,12 +66,12 @@ class _QLabel(QLabel):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        painter.setRenderHint(QPainter.RenderHint.LosslessImageRendering)
         painter.drawPixmap(self.rect(), self.p)
 
 
 class Window(QMainWindow):
-    video_size = QSize(1280, 700)
+    video_size = QSize(1200, 700)
     def __init__(self):
         super().__init__()
         self.initUI()
@@ -105,6 +101,7 @@ class Window(QMainWindow):
             self.thread.join(0)
         except:
             pass
+        return 0
 
     def closeEvent(self, _):
         signal.signal(signal.SIGTERM, self._kill)
@@ -128,6 +125,15 @@ class Window(QMainWindow):
             signal.signal(signal.SIGTERM, self._kill)
             sys.exit(0)
 
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.RightButton and event.type() == QEvent.Type.MouseButtonPress:
+            menu = QMenu()
+            menu.addAction("close Window", self._close_window)
+            menu.exec(self.mapToGlobal(event.position().toPoint()))
+
+    def _close_window(self):
+        signal.signal(signal.SIGTERM, self._kill)
+        sys.exit(0)
 
 def main():
     app = QApplication([])
