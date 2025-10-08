@@ -63,7 +63,7 @@ class Window(QMainWindow):
         self.initUI()
         self.setWindowTitle("Capture Board Viewer")
         multiprocessing.Process(target=_process_audio, daemon=True).start()
-        camera = QCamera(cameraDevice=QMediaDevices.videoInputs()[0])
+        camera = QCamera(cameraDevice=QMediaDevices.defaultVideoInput())
         camera.setCameraFormat(QCameraFormat(resolution=QSize(1280, 768), maxFrameRate=60))
         self.cap = QMediaCaptureSession()
         self.cap.setCamera(camera)
