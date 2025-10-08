@@ -1,57 +1,11 @@
 import ast
-import asyncio
-import signal
 import sys
-import threading
 import cv2
 import pyaudio
-from PySide6.QtCore import Qt, QSize, QEvent
+from PySide6.QtCore import Qt, QSize, QEvent, QThread, Signal, Slot
 from PySide6.QtGui import QImage, QPixmap, QPainter
 from PySide6.QtWidgets import QMainWindow, QLabel, QApplication, QSizePolicy, QMenu
 
-
-def check_device(): # check index from "USB Capture Board"
-    audio = pyaudio.PyAudio()
-    for i in range(audio.get_device_count()):
-        data = ast.literal_eval('{}'.format(audio.get_device_info_by_index(i)).encode("utf-8", errors='ignore').decode("utf-8", errors='ignore'))
-        if data["hostApi"] == 2 and "USB3.0 Capture" in data["name"]:
-            return data["index"]
-
-
-stream = pyaudio.PyAudio().open(format=pyaudio.paInt32,
-                                     rate=96000,
-                                     channels=1,
-                                     input_device_index=check_device(),
-                                     input=True) # input WebCam mic.
-play = pyaudio.PyAudio().open(format=pyaudio.paInt32,
-                                   rate=96000,
-                                   channels=1,
-                                   output_device_index=pyaudio.PyAudio().get_default_output_device_info()['index'],
-                                   output=True) # output to Speaker
-
-
-def _audio():
-    while True:
-        try:
-            yield stream.read(128)
-        except SystemExit:
-            break
-
-def _video():
-    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1200)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 700)
-    cap.set(cv2.CAP_PROP_FPS, 60)
-    while True:
-        try:
-            ret, frame = cap.read()
-            if ret:
-                h, w, ch = frame.shape
-                bytesPerLine = ch * w
-                yield QImage(frame, w, h, bytesPerLine, QImage.Format.Format_BGR888).convertToFormat(QImage.Format.Format_RGBA8888, Qt.ImageConversionFlag.NoOpaqueDetection)
-        except SystemExit:
-            break
-    cap.release()
 
 class _QLabel(QLabel):
     def __init__(self, parent=None):
@@ -71,41 +25,96 @@ class _QLabel(QLabel):
         painter.drawPixmap(self.rect(), self.p)
 
 
+class VideoThread(QThread):
+    change_pixmap_signal = Signal(QImage)
+    playing = True
+    stopping = False
+
+    def run(self):
+        while self.playing:
+            self.stopping = False
+            cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 700)
+            cap.set(cv2.CAP_PROP_FPS, 120)
+            while not self.stopping:
+                ret, frame = cap.read()
+                if ret:
+                    h, w, ch = frame.shape
+                    bytesPerLine = ch * w
+                    self.change_pixmap_signal.emit(QImage(frame, w, h, bytesPerLine, QImage.Format.Format_BGR888).convertToFormat(QImage.Format.Format_RGBA8888, Qt.ImageConversionFlag.NoOpaqueDetection))
+            cap.release()
+
+    def stop(self):
+        self.playing = False
+        self.stopping = True
+        self.wait()
+
+    def restart(self):
+        self.stopping = True
+
+
+class AudioThread(QThread):
+    change_audio_signal = Signal(bytes)
+    playing = True
+
+    def __init__(self):
+        super().__init__(None)
+        self.stream = pyaudio.PyAudio().open(format=pyaudio.paInt16,
+                                    rate=96000,
+                                    channels=1,
+                                    input_device_index=self.check_device(),
+                                    input=True)  # input WebCam mic.
+
+    def run(self):
+        while self.playing:
+            self.change_audio_signal.emit(self.stream.read(128))
+
+    def check_device(self):  # check index from "USB Capture Board"
+        audio = pyaudio.PyAudio()
+        for i in range(audio.get_device_count()):
+            data = ast.literal_eval('{}'.format(audio.get_device_info_by_index(i)).encode("utf-8", errors='ignore').decode("utf-8", errors='ignore'))
+            if data["hostApi"] == 2 and "USB3.0 Capture" in data["name"]:
+                return data["index"]
+
+    def stop(self):
+        self.playing = False
+        self.wait()
+
+
 class Window(QMainWindow):
     video_size = QSize(1200, 700)
-    def __init__(self):
+    play = pyaudio.PyAudio().open(format=pyaudio.paInt16,
+                                  rate=96000,
+                                  channels=1,
+                                  output_device_index=pyaudio.PyAudio().get_default_output_device_info()['index'],
+                                  output=True)  # output to Speaker
+    def __init__(self, app):
         super().__init__()
+        self.app = app
         self.initUI()
         self.setWindowTitle("Capture Board Viewer")
-        self.process = threading.Thread(target=self._audio, daemon=True)
-        self.thread = threading.Thread(target=self._video, daemon=True)
-        asyncio.run(self._load())
+        self.thread1 = VideoThread()
+        self.thread1.change_pixmap_signal.connect(self._video)
+        self.thread2 = AudioThread()
+        self.thread2.change_audio_signal.connect(self._audio)
+        self.thread1.start()
+        self.thread2.start()
 
-    async def _load(self):
-        await asyncio.gather(asyncio.to_thread(self._load2), self._load1())
+    @Slot(QImage)
+    def _video(self, image):
+        self.img_label1.setPixmap(QPixmap.fromImage(image, Qt.ImageConversionFlag.NoOpaqueDetection))
 
-    async def _load1(self):
-        self.process.start()
+    @Slot(bytes)
+    def _audio(self, microphone):
+        self.play.write(microphone)
 
-    def _load2(self):
-        self.thread.start()
-
-    def _video(self):
-        [self.img_label1.setPixmap(QPixmap.fromImage(image, Qt.ImageConversionFlag.NoOpaqueDetection)) for image in _video()]
-
-    def _audio(self):
-        [play.write(microphone) for microphone in _audio()]
-
-    def _kill(self, _):
-        try:
-            self.process.join(0)
-            self.thread.join(0)
-        except:
-            pass
-        return 0
+    def _kill(self):
+        self.thread1.stop()
+        self.thread2.stop()
 
     def closeEvent(self, _):
-        signal.signal(signal.SIGTERM, self._kill)
+        self._kill()
         sys.exit(0)
 
     def initUI(self):
@@ -120,27 +129,43 @@ class Window(QMainWindow):
 
     def keyPressEvent(self, e):
         if e.key() == Qt.Key.Key_Q:
-            signal.signal(signal.SIGTERM, self._kill)
+            self._kill()
             sys.exit(0)
         if e.key() == Qt.Key.Key_Escape:
-            signal.signal(signal.SIGTERM, self._kill)
+            self._kill()
             sys.exit(0)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.RightButton and event.type() == QEvent.Type.MouseButtonPress:
             menu = QMenu()
             menu.addAction("close Window", self._close_window)
+            menu.addAction("set View ON/OFF", self._setVisble_label)
+            menu.addAction("restart view", self._restart_view)
             menu.exec(self.mapToGlobal(event.position().toPoint()))
 
     def _close_window(self):
-        signal.signal(signal.SIGTERM, self._kill)
+        self._kill()
         sys.exit(0)
 
+    def _setVisble_label(self):
+        if self.img_label1.isVisible():
+            self.img_label1.setVisible(False)
+        else:
+            self.img_label1.setVisible(True)
+
+    def _restart_view(self):
+        self.img_label1.setVisible(False)
+        self.thread1.restart()
+        self.img_label1.setVisible(True)
+
+    def _Exec(self):
+        return self.app.exec()
+
+
 def main():
-    app = QApplication([])
-    ex = Window()
+    ex = Window(app=QApplication([]))
     ex.show()
-    sys.exit(app.exec())
+    sys.exit(ex._Exec())
 
 if __name__ == "__main__":
     main()
