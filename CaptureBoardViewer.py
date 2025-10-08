@@ -18,13 +18,14 @@ def check_device(): # check index from "USB Capture Board"
             return data["index"]
 
 
-stream = pyaudio.PyAudio().open(format=pyaudio.paInt16,
+stream = pyaudio.PyAudio().open(format=pyaudio.paInt32,
                                      rate=96000,
                                      channels=1,
                                      input_device_index=check_device(),
-                                     input=True) # WebCam mic input.
-play = pyaudio.PyAudio().open(format=pyaudio.paInt16,
-                                   rate=96000, channels=1,
+                                     input=True) # input WebCam mic.
+play = pyaudio.PyAudio().open(format=pyaudio.paInt32,
+                                   rate=96000,
+                                   channels=1,
                                    output_device_index=pyaudio.PyAudio().get_default_output_device_info()['index'],
                                    output=True) # output to Speaker
 
