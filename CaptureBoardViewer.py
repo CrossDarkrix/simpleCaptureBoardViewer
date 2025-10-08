@@ -4,7 +4,7 @@ import platform
 import sys
 import os
 import pyaudio
-from PySide6.QtCore import Qt, QSize, QEvent, Slot, QProcess, QProcessEnvironment
+from PySide6.QtCore import Qt, QSize, QEvent, Slot
 from PySide6.QtGui import QImage, QPixmap, QPainter
 from PySide6.QtMultimedia import QCamera, QCameraFormat, QMediaDevices, QVideoSink, QMediaCaptureSession, QVideoFrame
 from PySide6.QtWidgets import QMainWindow, QLabel, QApplication, QSizePolicy, QMenu
@@ -63,15 +63,8 @@ class Window(QMainWindow):
     def __init__(self, app):
         super().__init__()
         self.app = app
-        os.environ["QT_MEDIA_BACKEND"] = "windows"
-        os.environ["QT_MULTIMEDIA_PREFERRED_PLUGINS"] = "directshow"
         self.initUI()
         self.setWindowTitle("Capture Board Viewer")
-        self.process = QProcess()
-        self.process.setProcessEnvironment(QProcessEnvironment.systemEnvironment())
-        self.process.setProgram("C:\\Windows\\System32\cmd.exe")
-        self.process.setArguments("/c @set QT_MEDIA_BACKEND=windows")
-        self.process.start()
         multiprocessing.Process(target=_process_audio, daemon=True).start()
         camera = QCamera(cameraDevice=QMediaDevices.defaultVideoInput())
         camera.setCameraFormat(QCameraFormat(resolution=self.video_size, maxFrameRate=60))
@@ -92,7 +85,6 @@ class Window(QMainWindow):
         self.img_label1.setPixmap(QPixmap.fromImage(image))
 
     def closeEvent(self, _):
-        self.process.kill()
         sys.exit(0)
 
     def initUI(self):
