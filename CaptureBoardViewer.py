@@ -56,7 +56,7 @@ class _QLabel(QLabel):
         painter.drawPixmap(self.rect(), self.p)
 
 class Window(QMainWindow):
-    video_size = QSize(1280, 768)
+    video_size = QSize(1024, 800)
     def __init__(self, app):
         super().__init__()
         self.app = app
@@ -64,7 +64,7 @@ class Window(QMainWindow):
         self.setWindowTitle("Capture Board Viewer")
         multiprocessing.Process(target=_process_audio, daemon=True).start()
         camera = QCamera(cameraDevice=QMediaDevices.defaultVideoInput())
-        camera.setCameraFormat(QCameraFormat(resolution=QSize(1280, 768), maxFrameRate=60))
+        camera.setCameraFormat(QCameraFormat(resolution=self.video_size, maxFrameRate=60))
         self.cap = QMediaCaptureSession()
         self.cap.setCamera(camera)
         video_sink = QVideoSink(self)
