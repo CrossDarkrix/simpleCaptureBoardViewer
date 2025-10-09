@@ -1,45 +1,16 @@
-import ast
-import multiprocessing
-import platform
-import sys
+import gc
 import os
-import pyaudio
-from PySide6.QtCore import Qt, QSize, QEvent, Slot
+import sys
+from PySide6.QtCore import Qt, QSize, QEvent, Slot, QMicrophonePermission
 from PySide6.QtGui import QImage, QPixmap, QPainter
-from PySide6.QtMultimedia import QCamera, QCameraFormat, QMediaDevices, QVideoSink, QMediaCaptureSession, QVideoFrame
+from PySide6.QtMultimedia import QCamera, QCameraFormat, QMediaDevices, QVideoSink, QMediaCaptureSession, QVideoFrame, \
+    QMediaPlayer, QAudioSink, QAudioOutput, QAudioInput, QAudioSource, QAudioFormat
 from PySide6.QtWidgets import QMainWindow, QLabel, QApplication, QSizePolicy, QMenu
 
 os.environ["QT_MEDIA_BACKEND"] = "windows"
 os.environ["QT_MULTIMEDIA_PREFERRED_PLUGINS"] = "directshow"
 
-def check_device():  # check index from "USB Capture Board"
-    audio = pyaudio.PyAudio()
-    for i in range(audio.get_device_count()):
-        data = ast.literal_eval('{}'.format(audio.get_device_info_by_index(i)).encode("utf-8", errors='ignore').decode("utf-8", errors='ignore'))
-        if data["hostApi"] == 2 and "USB3.0 Capture" in data["name"]:
-            return data["index"]
-
-stream = pyaudio.PyAudio().open(format=pyaudio.paInt16,
-                                    rate=96000,
-                                    channels=1,
-                                    input_device_index=check_device(),
-                                    input=True)  # input WebCam mic.
-
-play = pyaudio.PyAudio().open(format=pyaudio.paInt16,
-                                  rate=96000,
-                                  channels=1,
-                                  output_device_index=pyaudio.PyAudio().get_default_output_device_info()['index'],
-                                  output=True)  # output to Speaker
-
-def _audio():
-    while True:
-        try:
-            yield stream.read(128)
-        except SystemExit:
-            break
-
-def _process_audio():
-    [play.write(microphone) for microphone in _audio()]
+gc.enable()
 
 class _QLabel(QLabel):
     def __init__(self, parent=None):
@@ -59,24 +30,46 @@ class _QLabel(QLabel):
         painter.drawPixmap(self.rect(), self.p)
 
 class Window(QMainWindow):
-    video_size = QSize(1024, 800)
+    video_size = QSize(1200, 800)
     def __init__(self, app):
         super().__init__()
         self.app = app
         self.initUI()
         self.setWindowTitle("Capture Board Viewer")
-        multiprocessing.Process(target=_process_audio, daemon=True).start()
         camera = QCamera(cameraDevice=QMediaDevices.defaultVideoInput())
-        camera.setCameraFormat(QCameraFormat(resolution=self.video_size, maxFrameRate=60))
+        camera.setCameraFormat(QCameraFormat(resolution=self.video_size, maxFrameRate=200))
         self.cap = QMediaCaptureSession()
+        audio_format = QAudioFormat()
+        audio_format.setSampleRate(96000)
+        audio_format.setChannelCount(1)
+        audio_format.setSampleFormat(QAudioFormat.SampleFormat.Int16)
+        self.audio_source = QAudioSource(QMediaDevices.defaultAudioInput(), format=audio_format)
+        output_format = QAudioFormat()
+        output_format.setSampleFormat(QAudioFormat.SampleFormat.Int16)
+        output_format.setSampleRate(96000)
+        output_format.setChannelCount(1)
+        self.audio_sink = QAudioSink(QMediaDevices.defaultAudioOutput(), format=output_format)
+        self.audio_source.setVolume(100)
         self.cap.setCamera(camera)
         video_sink = QVideoSink(self)
         self.cap.setVideoSink(video_sink)
         self.cap.videoSink().videoFrameChanged.connect(self._setImage)
         self.cap.camera().start()
+        self.audio_sink.setVolume(100)
+        self.cap.setAudioInput(QAudioInput(self.audio_source))
+        self.cap.setAudioOutput(QAudioOutput(self.audio_sink))
+        self.media_p = QMediaPlayer()
+        self.io_device_input = self.audio_source.start()
+        self.io_device_output = self.audio_sink.start()
+        microphonePermission = QMicrophonePermission()
+        micPermissionStatus = app.checkPermission(microphonePermission)
+        if micPermissionStatus == Qt.PermissionStatus.Undetermined:
+            app.requestPermission(microphonePermission, app, None)
 
     @Slot(QVideoFrame)
     def _setImage(self, frame: QVideoFrame):
+        gc.collect()
+        self.io_device_output.write(self.io_device_input.readAll())
         self.img_label1.setPixmap(QPixmap.fromImage(frame.toImage()))
 
     @Slot(QImage)
@@ -107,17 +100,10 @@ class Window(QMainWindow):
         if event.button() == Qt.MouseButton.RightButton and event.type() == QEvent.Type.MouseButtonPress:
             menu = QMenu()
             menu.addAction("close Window", self._close_window)
-            menu.addAction("set View ON/OFF", self._setVisble_label)
             menu.exec(self.mapToGlobal(event.position().toPoint()))
 
     def _close_window(self):
         sys.exit(0)
-
-    def _setVisble_label(self):
-        if self.img_label1.isVisible():
-            self.img_label1.setVisible(False)
-        else:
-            self.img_label1.setVisible(True)
 
     def _Exec(self):
         return self.app.exec()
@@ -128,10 +114,4 @@ def main():
     sys.exit(ex._Exec())
 
 if __name__ == "__main__":
-    os.environ["QT_MEDIA_BACKEND"] = "windows"
-    os.environ["QT_MULTIMEDIA_PREFERRED_PLUGINS"] = "directshow"
-    if platform.system() == 'Darwin':
-        multiprocessing.set_start_method('fork')
-    else:
-        multiprocessing.set_start_method('spawn')
     main()
