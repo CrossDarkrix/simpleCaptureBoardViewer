@@ -1,7 +1,5 @@
-import gc
 import os
 import sys
-
 from PySide6.QtCore import Qt, QSize, QEvent, Slot, QMicrophonePermission
 from PySide6.QtGui import QImage, QPixmap, QPainter
 from PySide6.QtMultimedia import QCamera, QCameraFormat, QMediaDevices, QVideoSink, QMediaCaptureSession, QVideoFrame, \
@@ -11,7 +9,6 @@ from PySide6.QtWidgets import QMainWindow, QLabel, QApplication, QSizePolicy, QM
 os.environ["QT_MEDIA_BACKEND"] = "windows"
 os.environ["QT_MULTIMEDIA_PREFERRED_PLUGINS"] = "directshow"
 
-gc.enable()
 
 class _QLabel(QLabel):
     def __init__(self, parent=None):
@@ -29,6 +26,7 @@ class _QLabel(QLabel):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.LosslessImageRendering)
         painter.drawPixmap(self.rect(), self.p)
+
 
 class Window(QMainWindow):
     video_size = QSize(1200, 800)
@@ -68,7 +66,6 @@ class Window(QMainWindow):
 
     @Slot(QVideoFrame)
     def _setImage(self, frame: QVideoFrame):
-        gc.collect()
         self.io_device_output.write(self.io_device_input.readAll())
         self.img_label1.setPixmap(QPixmap.fromImage(frame.toImage()))
 
@@ -107,6 +104,7 @@ class Window(QMainWindow):
 
     def _Exec(self):
         return self.app.exec()
+
 
 def main():
     ex = Window(app=QApplication([]))
