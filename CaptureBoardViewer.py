@@ -1,10 +1,11 @@
 import gc
 import os
 import sys
+
 from PySide6.QtCore import Qt, QSize, QEvent, Slot, QMicrophonePermission
 from PySide6.QtGui import QImage, QPixmap, QPainter
 from PySide6.QtMultimedia import QCamera, QCameraFormat, QMediaDevices, QVideoSink, QMediaCaptureSession, QVideoFrame, \
-    QMediaPlayer, QAudioSink, QAudioOutput, QAudioInput, QAudioSource, QAudioFormat
+    QAudioSink, QAudioOutput, QAudioInput, QAudioSource, QAudioFormat
 from PySide6.QtWidgets import QMainWindow, QLabel, QApplication, QSizePolicy, QMenu
 
 os.environ["QT_MEDIA_BACKEND"] = "windows"
@@ -58,7 +59,6 @@ class Window(QMainWindow):
         self.audio_sink.setVolume(100)
         self.cap.setAudioInput(QAudioInput(self.audio_source))
         self.cap.setAudioOutput(QAudioOutput(self.audio_sink))
-        self.media_p = QMediaPlayer()
         self.io_device_input = self.audio_source.start()
         self.io_device_output = self.audio_sink.start()
         microphonePermission = QMicrophonePermission()
