@@ -37,7 +37,7 @@ class Window(QMainWindow):
         self.initUI()
         self.setWindowTitle("Capture Board Viewer")
         camera = QCamera(cameraDevice=QMediaDevices.defaultVideoInput())
-        camera.setCameraFormat(QCameraFormat(resolution=self.video_size, maxFrameRate=200))
+        camera.setCameraFormat(QCameraFormat(resolution=self.video_size, maxFrameRate=75))
         self.cap = QMediaCaptureSession()
         audio_format = QAudioFormat()
         audio_format.setSampleRate(96000)
