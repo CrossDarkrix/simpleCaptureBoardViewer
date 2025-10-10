@@ -29,7 +29,7 @@ class _QLabel(QLabel):
 
 
 class Window(QMainWindow):
-    video_size = QSize(1200, 800)
+    video_size = QSize(1200, 800) # Window and video size.
     def __init__(self, app):
         super().__init__()
         self.app = app
@@ -38,7 +38,7 @@ class Window(QMainWindow):
         self.check_permission()
         self.init_Video_Audio()
 
-    def check_permission(self):
+    def check_permission(self): # set Permission.
         microphonePermission = QMicrophonePermission()
         micPermissionStatus = self.app.checkPermission(microphonePermission)
         if micPermissionStatus == Qt.PermissionStatus.Undetermined:
@@ -49,35 +49,25 @@ class Window(QMainWindow):
             self.app.requestPermission(cameraPermission, self.app, None)
 
     def init_Video_Audio(self):
-        camera = QCamera(cameraDevice=QMediaDevices.defaultVideoInput())
-        camera.setCameraFormat(QCameraFormat(resolution=self.video_size, maxFrameRate=75))
+        # camera and audio setting.
         self.cap = QMediaCaptureSession()
-        audio_format = QAudioFormat()
-        audio_format.setSampleRate(96000)
-        audio_format.setChannelCount(1)
-        audio_format.setSampleFormat(QAudioFormat.SampleFormat.Int16)
-        self.audio_source = QAudioSource(QMediaDevices.defaultAudioInput(), format=audio_format)
-        output_format = QAudioFormat()
-        output_format.setSampleFormat(QAudioFormat.SampleFormat.Int16)
-        output_format.setSampleRate(96000)
-        output_format.setChannelCount(1)
-        self.audio_sink = QAudioSink(QMediaDevices.defaultAudioOutput(), format=output_format)
-        self.audio_source.setVolume(100)
+        self.audio_source = QAudioSource(QMediaDevices.defaultAudioInput(), format=QMediaDevices.defaultAudioInput().preferredFormat())
+        self.audio_sink = QAudioSink(QMediaDevices.defaultAudioOutput(), format=QMediaDevices.defaultAudioInput().preferredFormat())
+        camera = QCamera(cameraDevice=QMediaDevices.defaultVideoInput(), cameraFormat=QCameraFormat(resolution=self.video_size, maxFrameRate=75))
         self.cap.setCamera(camera)
-        video_sink = QVideoSink(self)
-        self.cap.setVideoSink(video_sink)
+        # video setting.
+        self.cap.setVideoSink(QVideoSink(self))
         self.cap.videoSink().videoFrameChanged.connect(self._setImage)
-        self.cap.camera().start()
-        self.audio_sink.setVolume(100)
         self.cap.setAudioInput(QAudioInput(self.audio_source))
         self.cap.setAudioOutput(QAudioOutput(self.audio_sink))
-        self.io_device_input = self.audio_source.start()
-        self.io_device_output = self.audio_sink.start()
+        self.io_device_input = self.audio_source.start() # camera input audio.
+        self.io_device_output = self.audio_sink.start() # output to speaker.
+        self.cap.camera().start()  # camera start.
 
     @Slot(QVideoFrame)
-    def _setImage(self, frame: QVideoFrame):
-        self.io_device_output.write(self.io_device_input.readAll())
-        self.img_label1.setPixmap(QPixmap.fromImage(frame.toImage()))
+    def _setImage(self, frame: QVideoFrame): # Video frame set to QLabel and audio output to speaker.
+        self.io_device_output.write(self.io_device_input.readAll()) # io input device output data to speaker device.
+        self.img_label1.setPixmap(QPixmap.fromImage(frame.toImage())) # video frame set Pixelmap.
 
     def closeEvent(self, _):
         sys.exit(0)
@@ -86,23 +76,23 @@ class Window(QMainWindow):
         self.img_label1 = _QLabel()
         self.img_label1.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setCentralWidget(self.img_label1)
-        self.setMinimumSize(QSize(480, 360))
-        self.resize(self.video_size)
+        self.setMinimumSize(QSize(480, 360)) # minimum size is 480x360.
+        self.resize(self.video_size) # resize window to 1200x800
 
     def resizeEvent(self, event):
         self.img_label1.resize(event.size())
 
     def keyPressEvent(self, e):
-        if e.key() == Qt.Key.Key_Q:
+        if e.key() == Qt.Key.Key_Q: # press Q key to exit Application.
             sys.exit(0)
-        if e.key() == Qt.Key.Key_Escape:
+        if e.key() == Qt.Key.Key_Escape: # press Esc key to exit application.
             sys.exit(0)
 
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, event): # Application Right click Menu.
         if event.button() == Qt.MouseButton.RightButton and event.type() == QEvent.Type.MouseButtonPress:
             menu = QMenu()
-            menu.addAction("close Window", self._close_window)
-            menu.addAction("restart Audio and Video", self._restart_Audio_and_video)
+            menu.addAction("close Window", self._close_window) # this is application close.
+            menu.addAction("restart Audio and Video", self._restart_Audio_and_video) # resetting video and audio.
             menu.exec(self.mapToGlobal(event.position().toPoint()))
 
     def _restart_Audio_and_video(self):
