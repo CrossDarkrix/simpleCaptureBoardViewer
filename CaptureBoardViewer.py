@@ -35,6 +35,13 @@ class Window(QMainWindow):
         self.app = app
         self.initUI()
         self.setWindowTitle("Capture Board Viewer")
+        microphonePermission = QMicrophonePermission()
+        micPermissionStatus = app.checkPermission(microphonePermission)
+        if micPermissionStatus == Qt.PermissionStatus.Undetermined:
+            app.requestPermission(microphonePermission, app, None)
+        self.init_Video_Audio()
+
+    def init_Video_Audio(self):
         camera = QCamera(cameraDevice=QMediaDevices.defaultVideoInput())
         camera.setCameraFormat(QCameraFormat(resolution=self.video_size, maxFrameRate=75))
         self.cap = QMediaCaptureSession()
@@ -59,10 +66,6 @@ class Window(QMainWindow):
         self.cap.setAudioOutput(QAudioOutput(self.audio_sink))
         self.io_device_input = self.audio_source.start()
         self.io_device_output = self.audio_sink.start()
-        microphonePermission = QMicrophonePermission()
-        micPermissionStatus = app.checkPermission(microphonePermission)
-        if micPermissionStatus == Qt.PermissionStatus.Undetermined:
-            app.requestPermission(microphonePermission, app, None)
 
     @Slot(QVideoFrame)
     def _setImage(self, frame: QVideoFrame):
@@ -97,7 +100,11 @@ class Window(QMainWindow):
         if event.button() == Qt.MouseButton.RightButton and event.type() == QEvent.Type.MouseButtonPress:
             menu = QMenu()
             menu.addAction("close Window", self._close_window)
+            menu.addAction("restart Audio and Video", self._restart_Audio_and_video)
             menu.exec(self.mapToGlobal(event.position().toPoint()))
+
+    def _restart_Audio_and_video(self):
+        self.init_Video_Audio()
 
     def _close_window(self):
         sys.exit(0)
