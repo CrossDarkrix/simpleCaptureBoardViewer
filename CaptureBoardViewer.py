@@ -1,13 +1,16 @@
 import os
+import platform
 import sys
+
 from PySide6.QtCore import Qt, QSize, QEvent, Slot, QMicrophonePermission, QCameraPermission
 from PySide6.QtGui import QPixmap, QPainter
 from PySide6.QtMultimedia import QCamera, QCameraFormat, QMediaDevices, QVideoSink, QMediaCaptureSession, QVideoFrame, \
-    QAudioSink, QAudioOutput, QAudioInput, QAudioSource, QAudioFormat
+    QAudioSink, QAudioOutput, QAudioInput, QAudioSource
 from PySide6.QtWidgets import QMainWindow, QLabel, QApplication, QSizePolicy, QMenu
 
-os.environ["QT_MEDIA_BACKEND"] = "windows"
-os.environ["QT_MULTIMEDIA_PREFERRED_PLUGINS"] = "directshow"
+if platform.system() == 'Windows':
+    os.environ["QT_MEDIA_BACKEND"] = "windows"
+    os.environ["QT_MULTIMEDIA_PREFERRED_PLUGINS"] = "directshow"
 
 
 class _QLabel(QLabel):
@@ -53,6 +56,7 @@ class Window(QMainWindow):
         self.cap = QMediaCaptureSession()
         self.audio_source = QAudioSource(QMediaDevices.defaultAudioInput(), format=QMediaDevices.defaultAudioInput().preferredFormat())
         self.audio_sink = QAudioSink(QMediaDevices.defaultAudioOutput(), format=QMediaDevices.defaultAudioInput().preferredFormat())
+        # camera setting. set video size: 1200x800, max video frame rate: 75FPS.
         camera = QCamera(cameraDevice=QMediaDevices.defaultVideoInput(), cameraFormat=QCameraFormat(resolution=self.video_size, maxFrameRate=75))
         self.cap.setCamera(camera)
         # video setting.
