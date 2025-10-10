@@ -1,7 +1,7 @@
 import os
 import sys
-from PySide6.QtCore import Qt, QSize, QEvent, Slot, QMicrophonePermission
-from PySide6.QtGui import QImage, QPixmap, QPainter
+from PySide6.QtCore import Qt, QSize, QEvent, Slot, QMicrophonePermission, QCameraPermission
+from PySide6.QtGui import QPixmap, QPainter
 from PySide6.QtMultimedia import QCamera, QCameraFormat, QMediaDevices, QVideoSink, QMediaCaptureSession, QVideoFrame, \
     QAudioSink, QAudioOutput, QAudioInput, QAudioSource, QAudioFormat
 from PySide6.QtWidgets import QMainWindow, QLabel, QApplication, QSizePolicy, QMenu
@@ -35,11 +35,18 @@ class Window(QMainWindow):
         self.app = app
         self.initUI()
         self.setWindowTitle("Capture Board Viewer")
-        microphonePermission = QMicrophonePermission()
-        micPermissionStatus = app.checkPermission(microphonePermission)
-        if micPermissionStatus == Qt.PermissionStatus.Undetermined:
-            app.requestPermission(microphonePermission, app, None)
+        self.check_permission()
         self.init_Video_Audio()
+
+    def check_permission(self):
+        microphonePermission = QMicrophonePermission()
+        micPermissionStatus = self.app.checkPermission(microphonePermission)
+        if micPermissionStatus == Qt.PermissionStatus.Undetermined:
+            self.app.requestPermission(microphonePermission, self.app, None)
+        cameraPermission = QCameraPermission()
+        camPermissionStatus = self.app.checkPermission(cameraPermission)
+        if camPermissionStatus == Qt.PermissionStatus.Undetermined:
+            self.app.requestPermission(cameraPermission, self.app, None)
 
     def init_Video_Audio(self):
         camera = QCamera(cameraDevice=QMediaDevices.defaultVideoInput())
