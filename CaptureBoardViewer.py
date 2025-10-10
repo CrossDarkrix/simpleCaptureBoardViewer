@@ -72,11 +72,6 @@ class Window(QMainWindow):
         self.io_device_output.write(self.io_device_input.readAll())
         self.img_label1.setPixmap(QPixmap.fromImage(frame.toImage()))
 
-    @Slot(QImage)
-    def _video(self, image):
-        self.img_label1.clear()
-        self.img_label1.setPixmap(QPixmap.fromImage(image))
-
     def closeEvent(self, _):
         sys.exit(0)
 
