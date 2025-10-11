@@ -1,7 +1,6 @@
 import os
 import platform
 import sys
-import threading
 from PySide6.QtCore import Qt, QSize, QEvent, Slot, QMicrophonePermission, QCameraPermission
 from PySide6.QtGui import QPixmap, QPainter
 from PySide6.QtMultimedia import QCamera, QCameraFormat, QMediaDevices, QVideoSink, QMediaCaptureSession, QVideoFrame, \
@@ -74,8 +73,7 @@ class Window(QMainWindow):
         self.img_label1.setPixmap(QPixmap.fromImage(frame.toImage())) # video frame set Pixelmap.
 
     def set_audio(self): # set audio to speaker.
-        threading.Thread(target=self.io_device_output.write, args=(self.io_device_input.readAll(), ), daemon=True).start() # io input device output data to speaker device.
-        # self.io_device_output.write(self.io_device_input.readAll()) # io input device output data to speaker device.
+        self.io_device_output.write(self.io_device_input.readAll()) # io input device output data to speaker device.
 
     def closeEvent(self, _):
         sys.exit(0)
