@@ -35,6 +35,7 @@ class Window(QMainWindow):
     def __init__(self, app):
         super().__init__()
         self.app = app
+        self.video_frame = [QVideoFrame]
         self.initUI()
         self.setWindowTitle("Capture Board Viewer")
         self.check_permission()
@@ -70,10 +71,33 @@ class Window(QMainWindow):
 
     @Slot(QVideoFrame)
     def _setImage(self, frame: QVideoFrame): # Video frame set to QLabel and audio output to speaker.
-        self.img_label1.setPixmap(QPixmap.fromImage(frame.toImage())) # video frame set Pixelmap.
+        if self.io_device_input is None: # Stopped Audio to restart audio and video
+            self.init_Video_Audio()
+        if self.io_device_output is None: # Stopped Audio to restart audio and video
+            self.init_Video_Audio()
+        if self._is_StoppedVideo(frame): # Stopped Video to restart audio and video
+            self.init_Video_Audio()
+        try:
+            self.img_label1.setPixmap(QPixmap.fromImage(frame.toImage())) # video frame set Pixelmap.
+        except:
+            pass
 
     def set_audio(self): # set audio to speaker.
-        self.io_device_output.write(self.io_device_input.readAll()) # io input device output data to speaker device.
+        if self.io_device_input is None: # Stopped Audio to restart audio and video
+            self.init_Video_Audio()
+        if self.io_device_output is None: # Stopped Audio to restart audio and video
+            self.init_Video_Audio()
+        try:
+            self.io_device_output.write(self.io_device_input.readAll()) # io input device output data to speaker device.
+        except:
+            pass
+
+    def _is_StoppedVideo(self, frame):
+        if self.video_frame[0] != frame:
+            self.video_frame[0] = frame
+            return False
+        else:
+            return True
 
     def closeEvent(self, _):
         sys.exit(0)
