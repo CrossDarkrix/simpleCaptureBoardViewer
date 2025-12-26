@@ -1,6 +1,7 @@
 import os
 import platform
 import sys
+
 from PySide6.QtCore import Qt, QSize, QEvent, Slot, QMicrophonePermission, QCameraPermission
 from PySide6.QtGui import QPixmap, QPainter
 from PySide6.QtMultimedia import QCamera, QCameraFormat, QMediaDevices, QVideoSink, QMediaCaptureSession, QVideoFrame, \
@@ -52,6 +53,7 @@ class Window(QMainWindow):
             self.app.requestPermission(cameraPermission, self.app, None)
 
     def init_Video_Audio(self):
+        print(QMediaDevices.defaultAudioInput().preferredFormat())
         # camera and audio setting.
         self.cap = QMediaCaptureSession()
         self.audio_source = QAudioSource(QMediaDevices.defaultAudioInput(), format=QMediaDevices.defaultAudioInput().preferredFormat())
@@ -65,30 +67,19 @@ class Window(QMainWindow):
         self.cap.setAudioInput(QAudioInput(self.audio_source))
         self.cap.setAudioOutput(QAudioOutput(self.audio_sink))
         self.io_device_input = self.audio_source.start() # camera input audio.
-        self.io_device_output = self.audio_sink.start() # output to speaker.
         self.io_device_input.readyRead.connect(self.set_audio) # set Audio input to Speaker.
         self.cap.camera().start()  # camera start.
 
     @Slot(QVideoFrame)
     def _setImage(self, frame: QVideoFrame): # Video frame set to QLabel and audio output to speaker.
-        if self.io_device_input is None: # Stopped Audio to restart audio and video
-            self.init_Video_Audio()
-        if self.io_device_output is None: # Stopped Audio to restart audio and video
-            self.init_Video_Audio()
-        if self._is_StoppedVideo(frame): # Stopped Video to restart audio and video
-            self.init_Video_Audio()
         try:
             self.img_label1.setPixmap(QPixmap.fromImage(frame.toImage())) # video frame set Pixelmap.
         except:
             pass
 
     def set_audio(self): # set audio to speaker.
-        if self.io_device_input is None: # Stopped Audio to restart audio and video
-            self.init_Video_Audio()
-        if self.io_device_output is None: # Stopped Audio to restart audio and video
-            self.init_Video_Audio()
         try:
-            self.io_device_output.write(self.io_device_input.readAll()) # io input device output data to speaker device.
+            self.audio_sink.start().write(self.audio_source.start().readAll()) # io input device output data to speaker device.
         except:
             pass
 
